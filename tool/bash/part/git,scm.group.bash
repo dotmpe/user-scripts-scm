@@ -1,4 +1,4 @@
-scm_git_pre=User-Script.Git
+scm_git_pre=SCM.Git
 #scm_git_grp=( user-dirs )
 scm_git_man='scm-git - Better user commands for Git
 
@@ -32,27 +32,27 @@ scm_git_ssc=(
   local _gitdescribe
   (($#)) || set -- ${user_basedirs[@]}
   _gitdescribe=( describe --always --dirty --broken )
-  User-Script.Git.at-basedirs _gitdescribe "$@"'
+  SCM.Git.at-basedirs _gitdescribe "$@"'
 
   [.sync-at]=\
 ': param '\''~ <Base-dirs...>'\''
   local _gitsync
   (($#)) || set -- ${user_basedirs[@]}
   _gitsync=( sync --soft )
-  User-Script.Git.at-basedirs _gitsync "$@"'
+  SCM.Git.at-basedirs _gitsync "$@"'
 
   [.status-at]=\
 ': param '\''~ <File-match-> <Base-dirs...>'\''
   local _status_fnmatch=${1:-*} _gitstat
   [[ $# -gt 1 ]] && shift || set -- ${user_basedirs[@]}
   _gitstat=( status --short --untracked-files=no -- "$_status_fnmatch" )
-  User-Script.Git.at-basedirs _gitstat "$@"'
+  SCM.Git.at-basedirs _gitstat "$@"'
 
   [.grep-at]=\
 '  local _grep_match=${1:?} _grep_fnmatch=${2:-*} _gitgrep
   [[ $# -gt 2 ]] && shift 2 || set -- ${user_basedirs[@]}
   _gitgrep=( grep "$_grep_match" -- "$_grep_fnmatch" )
-  User-Script.Git.at-basedirs _gitgrep "$@"'
+  SCM.Git.at-basedirs _gitgrep "$@"'
 
   [.grep-userdirs]='.grep-at "${@:1:2}" "$user_dirs[@]}" "${@:3}"'
   [.grep-all-annexes]='.grep-at "${@:1:2}" "$user_annex[@]}" "${@:3}"'
@@ -77,7 +77,7 @@ scm_git_ssc=(
 declare -gA \
 scm_git_als=(
 
-  [.grep-all-versions]='GIT_REVOPT=--all User-Script.Git.grep-revopt'
+  [.grep-all-versions]='GIT_REVOPT=--all SCM.Git.grep-revopt'
   # XXX: also want to update clones, maybe work in bare repos for this?
   #[.update-all-clones]=
 
@@ -95,51 +95,70 @@ scm_git_hooks=(
   [define]=\
 'User.Config.expand-keymatch-filterhandle  user_annex  basedir.annexes-local  test -d'
   [init]='{
+  : "${SCM_GIT:=1}"
+  : "${SCM_GIT_INFO:=1}"
+  : "${SCM_GIT_STATUS:=0}"
+  : "${SCM_GIT_DESCRIBE:=1}"
   us_interactive_update+=( scm-git )
   user_config[basedir.annexes-local]="/srv/annex-local/*/"
 }'
   [update]='{
-  #! GITDIR=$(2>/dev/null git rev-parse --git-dir) &&
-
+  if ((!SCM_GIT)); then
+    return
+  fi
   ! GIT_BASEDIR=$(2>/dev/null git rev-parse --show-toplevel) &&
   unset GIT_BASEDIR || {
+    # XXX: cleanup; relative or abs GIT_BASEDIR?
     #[[ ${GIT_BASEDIR:0:1} == / ]] && : "$GIT_BASEDIR" || : "$PWD/$GIT_BASEDIR"
     #GIT_BASEDIR=$(realpath --relative-to $PWD $_)
 
-    declare -gA git_worktree_status
-    User-Script.Git.worktree-status "$GIT_BASEDIR" git_worktree_status
+    if ((SCM_GIT_STATUS || SCM_GIT_DESCRIBE)); then
+      declare -gA git_worktree_status
+      SCM.Git.worktree-status "$GIT_BASEDIR" git_worktree_status
+    fi
 
     #GIT_ABBREVID=$(git show-ref --head HEAD -s)
     GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-    GIT_DESCRIBE=$(git describe --always --dirty --broken)
-    [[ ${us_interactive_data["GIT_DESCRIBE"]-} == ${GIT_DESCRIBE} ]] || {
-      echo "${_f14-}Git at version ${_f2-}$GIT_DESCRIBE${NORMAL}"
-      us_interactive_data["GIT_DESCRIBE"]=$GIT_DESCRIBE
-    }
 
-    PROMPT_EXTRA=${PROMPT_EXTRA:+$PROMPT_EXTRA }
+    if ((SCM_GIT_DESCRIBE)); then
+      GIT_DESCRIBE=$(git describe --always --dirty --broken)
+      [[ ${us_interactive_data["GIT_DESCRIBE"]-} == ${GIT_DESCRIBE} ]] || {
+        echo "${_f14-}Git at version ${_f2-}$GIT_DESCRIBE${NORMAL}"
+        us_interactive_data["GIT_DESCRIBE"]=$GIT_DESCRIBE
+      }
+    fi
 
-    [[ $TERM == linux* ]] &&
-    PROMPT_EXTRA+="# $GIT_BRANCH" || {
-      # Use powerline
-      #PROMPT_EXTRA+="${_f6-}${_f7-}$GIT_BRANCH"
-      PROMPT_EXTRA+=" $GIT_BRANCH"
-      ((PROMPT_MB+=2))
-    }
+    if ((SCM_GIT_INFO || SCM_GIT_STATUS)); then
+      PROMPT_EXTRA=${PROMPT_EXTRA:+$PROMPT_EXTRA }
 
-    [[ ${git_worktree_status["modified-count"]} -eq 0 ]] ||
-      PROMPT_EXTRA+=" *${git_worktree_status["modified-count"]}"
-    [[ ${git_worktree_status["added-count"]} -eq 0 ]] ||
-      PROMPT_EXTRA+=" +${git_worktree_status["added-count"]}"
-    [[ ${git_worktree_status["deleted-count"]} -eq 0 ]] ||
-      PROMPT_EXTRA+=" -${git_worktree_status["deleted-count"]}"
-    [[ ${git_worktree_status["untracked-count"]} -eq 0 ]] ||
-      PROMPT_EXTRA+=" ~${git_worktree_status["untracked-count"]}"
+      if ((SCM_GIT_INFO)); then
+        [[ $TERM == linux* ]] &&
+        PROMPT_EXTRA+="# $GIT_BRANCH" || {
+          # Use powerline
+          #PROMPT_EXTRA+="${_f6-}${_f7-}$GIT_BRANCH"
+          PROMPT_EXTRA+=" $GIT_BRANCH"
+          ((PROMPT_MB+=2))
+        }
+      fi
+
+      if ((SCM_GIT_STATUS)); then
+        [[ ${git_worktree_status["modified-count"]} -eq 0 ]] ||
+          PROMPT_EXTRA+=" *${git_worktree_status["modified-count"]}"
+        [[ ${git_worktree_status["added-count"]} -eq 0 ]] ||
+          PROMPT_EXTRA+=" +${git_worktree_status["added-count"]}"
+        [[ ${git_worktree_status["deleted-count"]} -eq 0 ]] ||
+          PROMPT_EXTRA+=" -${git_worktree_status["deleted-count"]}"
+        [[ ${git_worktree_status["untracked-count"]} -eq 0 ]] ||
+          PROMPT_EXTRA+=" ~${git_worktree_status["untracked-count"]}"
+      fi
+    fi
+
   }
 }'
+
 )
 
-User-Script.Git.at-basedirs ()
+SCM.Git.at-basedirs ()
 {
 : param '~ <Cmd-arr> <Basedirs...>'
   local -n git_at_cmdargs=${1:?}
@@ -160,7 +179,7 @@ User-Script.Git.at-basedirs ()
   done
 }
 
-User-Script.Git.worktree-status ()
+SCM.Git.worktree-status ()
 {
 : param '~ <Git-dir> <Out-hash>'
   local -n _scm_git_stat=${2:-git_scm_stat}
@@ -194,7 +213,7 @@ User-Script.Git.worktree-status ()
 #}
 
 # TODO: provide function part for git-grep.sh functionality
-User-Script.Git.grep-all () # ~ <Git-grep-args> [-- <Basedirs>]
+SCM.Git.grep-all () # ~ <Git-grep-args> [-- <Basedirs>]
 {
   local -a git_grep_args
   while [[ $# -gt 0 && $1 != -- ]]
@@ -228,7 +247,7 @@ User-Script.Git.grep-all () # ~ <Git-grep-args> [-- <Basedirs>]
   done
 }
 
-User-Script.Git.status-all () # ~ <Git-status-args> [-- <Basedirs>]
+SCM.Git.status-all () # ~ <Git-status-args> [-- <Basedirs>]
 {
 : about 'Get detailed file status for worktrees at basedirs'
 : extended 'Set SCM_GIT_PATH to specify default basedirs (fallback is PATH)'
@@ -263,12 +282,12 @@ User-Script.Git.status-all () # ~ <Git-status-args> [-- <Basedirs>]
   done
 }
 
-User-Script.Git.grep-version () # ~ <Expr> <Paths...>
+SCM.Git.grep-version () # ~ <Expr> <Paths...>
 {
   git grep "${1:?}" $(git rev-list ${GIT_REVOPT:=--all}) -- "${@:2}"
 }
 
-User-Script.Git.period ()
+SCM.Git.period ()
 {
   : about 'Output lines with first/last commit dates for each path'
   local date first last git_log_dates_cmd
@@ -290,7 +309,7 @@ User-Script.Git.period ()
   done
 }
 
-User-Script.Git.remotes ()
+SCM.Git.remotes ()
 {
 : param '<Dir> <Dest-arr>'
   local -n _sgr_map1=${2:?}
@@ -303,7 +322,7 @@ User-Script.Git.remotes ()
   done < <(git --git-dir "$1/.git" remote --verbose)
 }
 
-User-Script.Git.remotes-byname ()
+SCM.Git.remotes-byname ()
 {
 : param '<Dir> <Dest-arr> [<Name-match...>]'
   local -n _sgr_map2=${2:?}

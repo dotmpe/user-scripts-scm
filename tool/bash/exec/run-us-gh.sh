@@ -1,5 +1,7 @@
 #!/bin/bash
 #
+# run-us-gh - fetch, tag and list GitHub repositories (via the `gh` CLI)
+#
 # Copyright (c) 2026 .mpe  <me@dotmpe.com>
 #
 # Distributed under terms of the MIT license.
@@ -7,9 +9,9 @@ set -euo pipefail
 shopt -s failglob nullglob
 IFS=$' \t\n'
 
-[[ ! -e .env.sh ]] || \builtin . ./.env.sh
+[[ ! -e ${LOCAL_ENV:=.local/env/default.bash} ]] || \builtin . "${LOCAL_ENV:?}"
 
-: "${US_SKELETON_DIR:=/src/local/user-script-template+dev}"
+: "${US_SKELETON_DIR:=/src/local/user-scripts-template+dev}"
 PATH+=:"${US_SKELETON_DIR:?}/tool/local"
 
 scr_pre=tool/local
@@ -29,6 +31,11 @@ usp us-gh
 case "${0##*/}" in
   ( run-us-gh.* )
       case "${1:---tag}" in
+
+        ( --configure-org )
+
+          ;;
+
         ( --fetch )              ${us_gh_pre:?}fetch-repolist.tsv
           ;;
         ( --fetch-details )      ${us_gh_pre:?}fetch-repolist-details.tsv
@@ -39,6 +46,8 @@ case "${0##*/}" in
           ;;
         ( --status )             ${us_gh_pre:?}workflow-status "${@:2}"
           ;;
+        ( --grep-repolist )      ${us_gh_pre:?}grep-repolist "${@:2}" ;;
+
         ( * ) :failerr "${1@Q}?"
       esac
     ;;
